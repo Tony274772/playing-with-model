@@ -274,3 +274,33 @@ def save_cross_validation_metrics(fold_results, out_dir):
 
     logging.info(f"Saved cross-validation metrics to {metrics_path}")
     return metrics_path
+
+
+def print_cv_summary(cv_metrics_path):
+    """Print a clean summary table of mean ± std across CV folds.
+    
+    Args:
+        cv_metrics_path: path to cv_metrics.json file
+    """
+    with open(cv_metrics_path, "r") as f:
+        cv_data = json.load(f)
+    
+    aggregate = cv_data.get("aggregate_validation", {})
+    num_folds = cv_data.get("num_folds", 5)
+    
+    # Metrics to display
+    metric_keys = ["PR-AUC", "F1", "MCC", "Recall", "Precision", "Accuracy"]
+    
+    print("\n" + "="*80)
+    print(f"CROSS-VALIDATION SUMMARY ({num_folds} FOLDS)")
+    print("="*80)
+    print(f"{'Metric':<15} {'Mean':>12} {'Std':>12}")
+    print("-"*80)
+    
+    for metric in metric_keys:
+        if metric in aggregate:
+            mean = aggregate[metric]["mean"]
+            std = aggregate[metric]["std"]
+            print(f"{metric:<15} {mean:>12.4f} {std:>12.4f}")
+    
+    print("="*80 + "\n")

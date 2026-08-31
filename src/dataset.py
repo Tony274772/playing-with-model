@@ -15,20 +15,66 @@ import random
 
 from src.descriptors import DescriptorLookup
 
+
+def generate_smiles_variants(smiles: str, n_variants: int) -> list:
+    """Generate up to n_variants distinct chemically valid random SMILES for a molecule.
+
+    Uses RDKit's non-canonical (doRandom=True) SMILES output. If the input cannot
+    be parsed, or no variant is produced, the original string is returned unchanged.
+    """
+    from rdkit import Chem
+    from rdkit import RDLogger
+    RDLogger.DisableLog("rdApp.*")
+
+    smiles = str(smiles)
+    if not smiles.strip():
+        return [smiles]
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return [smiles]
+    variants = {smiles}
+    max_attempts = n_variants * 10
+    attempts = 0
+    while len(variants) < n_variants and attempts < max_attempts:
+        variants.add(Chem.MolToSmiles(mol, doRandom=True))
+        attempts += 1
+    return list(variants)
+
+
 class CompatibilityDataset(Dataset):
-    def __init__(self, csv_path: str = None, df: pd.DataFrame = None, is_train: bool = False, modality_dropout_rate: float = 0.2):
+    def __init__(self, csv_path: str = None, df: pd.DataFrame = None, is_train: bool = False, modality_dropout_rate: float = 0.2, smiles_augment_positive_class: bool = False, smiles_augment_n_variants: int = 5):
         """
         Args:
             csv_path: path to train.csv, val.csv, or test.csv
             df: in-memory dataframe, used for cross-validation folds
             is_train: if True, applies modality dropout dynamically
             modality_dropout_rate: prob to simulate missing excipient SMILES
+            smiles_augment_positive_class: if True, augments positive-class train rows
+            smiles_augment_n_variants: number of random SMILES variants to cache per molecule
         """
         if df is None and csv_path is None:
             raise ValueError("Either csv_path or df must be provided.")
         self.df = df.reset_index(drop=True) if df is not None else pd.read_csv(csv_path)
         self.is_train = is_train
         self.modality_dropout_rate = modality_dropout_rate
+        self.smiles_augment_positive_class = smiles_augment_positive_class
+        self.smiles_augment_n_variants = smiles_augment_n_variants
+
+        # Precompute random SMILES variants once per unique molecule used in
+        # positive-class training rows. Descriptor lookup keys off CID, not
+        # SMILES, so swapping to a variant does not break descriptors.
+        self._smiles_variant_cache = {}
+        if self.is_train and self.smiles_augment_positive_class:
+            positive_mask = self.df["Outcome1"] == 1
+            if positive_mask.any():
+                positive_rows = self.df.loc[positive_mask]
+                unique_smiles = set()
+                for col in ("API_Smiles", "Excipient_Smiles"):
+                    unique_smiles.update(positive_rows[col].dropna().astype(str).unique())
+                for smi in unique_smiles:
+                    self._smiles_variant_cache[smi] = generate_smiles_variants(
+                        smi, self.smiles_augment_n_variants
+                    )
 
     def __len__(self):
         return len(self.df)
@@ -54,6 +100,17 @@ class CompatibilityDataset(Dataset):
             # replace the structural branch with its learned placeholder, so the
             # featurizer should never see a fake empty SMILES for valid data.
             exc_smiles_available = 0.0
+
+        # SMILES randomization augmentation: positive-class training rows only.
+        # Val/test rows and negative-class train rows keep exact original SMILES.
+        if self.is_train and self.smiles_augment_positive_class and label == 1.0:
+            api_variants = self._smiles_variant_cache.get(str(api_smi))
+            if api_variants:
+                api_smi = random.choice(api_variants)
+            if exc_smi:
+                exc_variants = self._smiles_variant_cache.get(str(exc_smi))
+                if exc_variants:
+                    exc_smi = random.choice(exc_variants)
 
         return {
             "api_cid": row["API_CID"],
@@ -160,7 +217,9 @@ def get_dataloaders(config, featurizer):
     train_dataset = CompatibilityDataset(
         csv_path=f"{config.data_dir}/train.csv", 
         is_train=True, 
-        modality_dropout_rate=config.modality_dropout_rate
+        modality_dropout_rate=config.modality_dropout_rate,
+        smiles_augment_positive_class=config.smiles_augment_positive_class,
+        smiles_augment_n_variants=config.smiles_augment_n_variants
     )
     val_dataset = CompatibilityDataset(
         csv_path=f"{config.data_dir}/val.csv", 
@@ -217,7 +276,9 @@ def get_dataloader_from_dataframe(config, featurizer, df, is_train=False, shuffl
     dataset = CompatibilityDataset(
         df=df,
         is_train=is_train,
-        modality_dropout_rate=config.modality_dropout_rate
+        modality_dropout_rate=config.modality_dropout_rate,
+        smiles_augment_positive_class=config.smiles_augment_positive_class,
+        smiles_augment_n_variants=config.smiles_augment_n_variants
     )
     descriptor_lookup = create_descriptor_lookup(config)
     collate = create_collate_fn(featurizer, descriptor_lookup)

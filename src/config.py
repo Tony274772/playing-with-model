@@ -62,6 +62,10 @@ class Config:
     positive_prior: float = 0.0941
     # Use WeightedRandomSampler to balance batch composition
     use_balanced_sampler: bool = True
+    # SMILES randomization augmentation for positive-class training rows only
+    smiles_augment_positive_class: bool = False
+    # Number of distinct random SMILES variants to cache per molecule
+    smiles_augment_n_variants: int = 5
 
     # ------------------------------------------------------------------ #
     # Evaluation

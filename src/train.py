@@ -4,12 +4,34 @@ Training loop with early stopping, model checkpointing, and LR scheduling.
 
 import logging
 import os
+import time
 
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .evaluate import evaluate_model
+
+
+def _save_checkpoint_safely(state_dict, path, max_attempts=10, delay=0.5):
+    """Save a checkpoint, retrying transient file locks (e.g. OneDrive/AV on Windows).
+
+    Writes to a temp file first, then atomically renames over the target, so a
+    momentarily locked destination does not abort training.
+    """
+    tmp_path = path + ".tmp"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            torch.save(state_dict, tmp_path)
+            os.replace(tmp_path, path)
+            return
+        except (OSError, RuntimeError) as e:
+            if attempt == max_attempts:
+                raise
+            logging.warning(
+                f"Checkpoint save to {path} failed (attempt {attempt}/{max_attempts}): {e}. Retrying..."
+            )
+            time.sleep(delay)
 
 def train_model(config, model, train_loader, val_loader, criterion):
     """
@@ -80,7 +102,7 @@ def train_model(config, model, train_loader, val_loader, criterion):
             best_val_pr_auc = val_pr_auc
             best_epoch = epoch
             patience_counter = 0
-            torch.save(model.state_dict(), best_model_path)
+            _save_checkpoint_safely(model.state_dict(), best_model_path)
             logging.info(
                 f"  -> Best model saved! "
                 f"(Val PR-AUC: {best_val_pr_auc:.4f}; Epoch: {best_epoch})"
