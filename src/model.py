@@ -1,5 +1,6 @@
 """MoLFormer-based API/excipient compatibility model."""
 
+import math
 import torch
 import torch.nn as nn
 
@@ -71,6 +72,12 @@ class APIExcipientModel(nn.Module):
             nn.Dropout(config.clf_dropout_2),
             nn.Linear(config.clf_hidden_dim_2, 1),
         )
+
+        # Initialize the final classifier layer's bias to the log-odds of the positive class prior
+        # This corrects for class imbalance and prevents wasting early epochs on bias correction
+        final_linear_layer = self.classifier[-1]  # Get the last Linear layer
+        log_odds = math.log(config.positive_prior / (1.0 - config.positive_prior))
+        torch.nn.init.constant_(final_linear_layer.bias, log_odds)
 
     def _prepend_cls(self, token_sequence, pooler_output, mask, projection):
         token_projection = projection(token_sequence)

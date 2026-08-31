@@ -56,6 +56,14 @@ class Config:
     asl_clip: float = 0.05
 
     # ------------------------------------------------------------------ #
+    # Class imbalance handling
+    # ------------------------------------------------------------------ #
+    # Positive class prior computed from data/train.csv: 191 positives / 2030 total rows
+    positive_prior: float = 0.0941
+    # Use WeightedRandomSampler to balance batch composition
+    use_balanced_sampler: bool = True
+
+    # ------------------------------------------------------------------ #
     # Evaluation
     # ------------------------------------------------------------------ #
     threshold_step: float = 0.001

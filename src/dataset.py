@@ -10,7 +10,7 @@ collate function calls the featurizer.
 
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 import random
 
 from src.descriptors import DescriptorLookup
@@ -108,6 +108,43 @@ def create_collate_fn(featurizer, descriptor_lookup=None):
     return collate_fn
 
 
+def create_balanced_sampler(dataset):
+    """Create a WeightedRandomSampler that balances class composition in each batch.
+    
+    Computes per-sample weights as 1.0 / class_count[label] for each row,
+    ensuring minority class samples appear with higher probability.
+    
+    Args:
+        dataset: CompatibilityDataset instance
+        
+    Returns:
+        WeightedRandomSampler with weights computed from labels
+    """
+    labels = dataset.df["Outcome1"].values
+    
+    # Count positives and negatives
+    num_positives = (labels == 1).sum()
+    num_negatives = (labels == 0).sum()
+    
+    # Assign weight: 1.0 / class_count[label]
+    weights = []
+    for label in labels:
+        if label == 1:
+            weight = 1.0 / num_positives
+        else:
+            weight = 1.0 / num_negatives
+        weights.append(weight)
+    
+    weights = torch.tensor(weights, dtype=torch.float32)
+    
+    sampler = WeightedRandomSampler(
+        weights=weights,
+        num_samples=len(dataset),
+        replacement=True
+    )
+    return sampler
+
+
 def create_descriptor_lookup(config):
     if not config.use_descriptors:
         return None
@@ -137,13 +174,24 @@ def get_dataloaders(config, featurizer):
     descriptor_lookup = create_descriptor_lookup(config)
     collate = create_collate_fn(featurizer, descriptor_lookup)
     
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=config.batch_size, 
-        shuffle=True, 
-        collate_fn=collate,
-        drop_last=False
-    )
+    # Train loader: use balanced sampler if enabled, otherwise shuffle
+    if config.use_balanced_sampler:
+        train_sampler = create_balanced_sampler(train_dataset)
+        train_loader = DataLoader(
+            train_dataset, 
+            batch_size=config.batch_size, 
+            sampler=train_sampler, 
+            collate_fn=collate,
+            drop_last=False
+        )
+    else:
+        train_loader = DataLoader(
+            train_dataset, 
+            batch_size=config.batch_size, 
+            shuffle=True, 
+            collate_fn=collate,
+            drop_last=False
+        )
     
     val_loader = DataLoader(
         val_dataset, 
@@ -174,10 +222,21 @@ def get_dataloader_from_dataframe(config, featurizer, df, is_train=False, shuffl
     descriptor_lookup = create_descriptor_lookup(config)
     collate = create_collate_fn(featurizer, descriptor_lookup)
 
-    return DataLoader(
-        dataset,
-        batch_size=config.batch_size,
-        shuffle=shuffle,
-        collate_fn=collate,
-        drop_last=False
-    )
+    # Use balanced sampler for training data if enabled, otherwise use shuffle parameter
+    if is_train and config.use_balanced_sampler:
+        sampler = create_balanced_sampler(dataset)
+        return DataLoader(
+            dataset,
+            batch_size=config.batch_size,
+            sampler=sampler,
+            collate_fn=collate,
+            drop_last=False
+        )
+    else:
+        return DataLoader(
+            dataset,
+            batch_size=config.batch_size,
+            shuffle=shuffle,
+            collate_fn=collate,
+            drop_last=False
+        )
