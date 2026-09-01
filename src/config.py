@@ -87,3 +87,28 @@ class Config:
         if self.device == "auto":
             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return torch.device(self.device)
+
+    def compute_positive_prior(self) -> float:
+        """Compute positive class prior from the training data.
+        
+        Reads {data_dir}/train.csv and computes the fraction of positive
+        examples. Used for subset-aware bias initialization in the classifier.
+        If train.csv doesn't exist, returns the default prior (0.0941).
+        """
+        import os
+        import pandas as pd
+        
+        train_path = os.path.join(self.data_dir, "train.csv")
+        if not os.path.exists(train_path):
+            return self.positive_prior  # Return default if file doesn't exist
+        
+        try:
+            df = pd.read_csv(train_path)
+            n_positive = (df["Outcome1"] == 1).sum()
+            n_total = len(df)
+            if n_total > 0:
+                return n_positive / n_total
+        except Exception:
+            pass
+        
+        return self.positive_prior  # Return default on any error

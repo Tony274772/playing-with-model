@@ -59,6 +59,10 @@ def cross_validate_config(config=None, n_splits=5):
         raise ValueError("This validation utility is fixed to 5 folds by the spec.")
 
     config = config or Config()
+    
+    # Compute positive_prior from the active training data for correct bias initialization
+    config.positive_prior = config.compute_positive_prior()
+    
     set_seed(config.seed)
     device = config.get_device()
 
@@ -171,4 +175,22 @@ def cross_validate_config(config=None, n_splits=5):
 
 
 if __name__ == "__main__":
-    cross_validate_config()
+    import argparse
+    parser = argparse.ArgumentParser(description="Run 5-fold cross-validation on the API-Excipient model.")
+    parser.add_argument("--data-dir", default=None, help="Directory containing train.csv, val.csv, and test.csv.")
+    parser.add_argument("--checkpoint-dir", default=None, help="Directory for fold checkpoint subdirectories.")
+    parser.add_argument("--metrics-dir", default=None, help="Directory for the cross-validation metrics JSON.")
+    parser.add_argument("--descriptor-norm-stats-path", default=None, help="Path to descriptor_norm_stats.json for this run.")
+    args = parser.parse_args()
+    
+    config = Config()
+    if args.data_dir is not None:
+        config.data_dir = args.data_dir
+    if args.checkpoint_dir is not None:
+        config.checkpoint_dir = args.checkpoint_dir
+    if args.metrics_dir is not None:
+        config.metrics_dir = args.metrics_dir
+    if args.descriptor_norm_stats_path is not None:
+        config.descriptor_norm_stats_path = args.descriptor_norm_stats_path
+    
+    cross_validate_config(config)
