@@ -30,6 +30,9 @@ logging.basicConfig(
 def main():
     parser = argparse.ArgumentParser(description="Train and evaluate the API-Excipient compatibility model.")
     parser.add_argument("--data-dir", default=None, help="Directory containing train.csv, val.csv, and test.csv.")
+    parser.add_argument("--train-csv", default=None, help="Explicit path to training CSV file.")
+    parser.add_argument("--val-csv", default=None, help="Explicit path to validation CSV file.")
+    parser.add_argument("--test-csv", default=None, help="Explicit path to test CSV file.")
     parser.add_argument("--checkpoint-dir", default=None, help="Directory for the best model checkpoint.")
     parser.add_argument("--metrics-dir", default=None, help="Directory for the run metrics JSON.")
     parser.add_argument("--descriptor-norm-stats-path", default=None, help="Path to descriptor_norm_stats.json for this run.")
@@ -38,6 +41,12 @@ def main():
     config = Config()
     if args.data_dir is not None:
         config.data_dir = args.data_dir
+    if args.train_csv is not None:
+        config.train_csv = args.train_csv
+    if args.val_csv is not None:
+        config.val_csv = args.val_csv
+    if args.test_csv is not None:
+        config.test_csv = args.test_csv
     if args.checkpoint_dir is not None:
         config.checkpoint_dir = args.checkpoint_dir
     if args.metrics_dir is not None:

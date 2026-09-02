@@ -215,18 +215,18 @@ def get_dataloaders(config, featurizer):
     """Return train, val, and test dataloaders."""
     
     train_dataset = CompatibilityDataset(
-        csv_path=f"{config.data_dir}/train.csv", 
+        csv_path=config.get_train_csv_path(), 
         is_train=True, 
         modality_dropout_rate=config.modality_dropout_rate,
         smiles_augment_positive_class=config.smiles_augment_positive_class,
         smiles_augment_n_variants=config.smiles_augment_n_variants
     )
     val_dataset = CompatibilityDataset(
-        csv_path=f"{config.data_dir}/val.csv", 
+        csv_path=config.get_val_csv_path(), 
         is_train=False
     )
     test_dataset = CompatibilityDataset(
-        csv_path=f"{config.data_dir}/test.csv", 
+        csv_path=config.get_test_csv_path(), 
         is_train=False
     )
     

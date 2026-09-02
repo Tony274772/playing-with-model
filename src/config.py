@@ -10,6 +10,9 @@ class Config:
     # Data paths
     # ------------------------------------------------------------------ #
     data_dir: str = "data"
+    train_csv: str = None
+    val_csv: str = None
+    test_csv: str = None
     molformer_model_path: str = "models/molformer-xl-both-10pct"
     molformer_dim: int = 768
 
@@ -83,22 +86,34 @@ class Config:
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
+    def get_train_csv_path(self) -> str:
+        import os
+        return self.train_csv if self.train_csv else os.path.join(self.data_dir, "train.csv")
+
+    def get_val_csv_path(self) -> str:
+        import os
+        return self.val_csv if self.val_csv else os.path.join(self.data_dir, "val.csv")
+
+    def get_test_csv_path(self) -> str:
+        import os
+        return self.test_csv if self.test_csv else os.path.join(self.data_dir, "test.csv")
+
     def get_device(self) -> torch.device:
         if self.device == "auto":
             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return torch.device(self.device)
 
     def compute_positive_prior(self) -> float:
-        """Compute positive class prior from the training data.
+        """Compute positive class prior from the active training data.
         
-        Reads {data_dir}/train.csv and computes the fraction of positive
+        Reads the training CSV and computes the fraction of positive
         examples. Used for subset-aware bias initialization in the classifier.
-        If train.csv doesn't exist, returns the default prior (0.0941).
+        If file doesn't exist, returns the default prior (0.0941).
         """
         import os
         import pandas as pd
         
-        train_path = os.path.join(self.data_dir, "train.csv")
+        train_path = self.get_train_csv_path()
         if not os.path.exists(train_path):
             return self.positive_prior  # Return default if file doesn't exist
         
